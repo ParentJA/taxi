@@ -45,7 +45,7 @@
     });
   }
 
-  function MainController($state, $websocket, AccountModel, growl, logOutService, navigationService) {
+  function MainController($state, AccountModel, logOutService, navigationService) {
     var vm = this;
 
     vm.navigationService = navigationService;
@@ -59,27 +59,6 @@
         $state.go('log_in');
       });
     };
-
-    function onConnect(message) {
-      console.log('Connected.');
-    }
-
-    function onReceive(message) {
-      growl.info('Message received.');
-    }
-
-    function onDisconnect(message) {
-      console.log('Disconnected.');
-    }
-
-    function init() {
-      var dataStream = $websocket('ws://localhost:8000/');
-      dataStream.onOpen(onConnect);
-      dataStream.onMessage(onReceive);
-      dataStream.onOpen(onDisconnect);
-    }
-
-    init();
   }
 
   angular.module('templates', []);
@@ -93,7 +72,7 @@
     }])
     .run(['$rootScope', '$state', 'AccountModel', 'navigationService', CoreRunner])
     .controller('MainController', [
-      '$state', '$websocket', 'AccountModel', 'growl', 'logOutService', 'navigationService', MainController
+      '$state', 'AccountModel', 'logOutService', 'navigationService', MainController
     ]);
 
 })(window, window.angular);

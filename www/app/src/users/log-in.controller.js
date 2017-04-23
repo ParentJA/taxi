@@ -2,7 +2,7 @@
 
   'use strict';
 
-  function LogInController($state, logInService) {
+  function LogInController($state, logInService, websocketService) {
     var vm = this;
     
     vm.error = {};
@@ -16,6 +16,7 @@
 
     vm.onSubmit = function onSubmit() {
       logInService(vm.username, vm.password).then(function () {
+        websocketService.connect();
         $state.go('app.dashboard');
       }, function (response) {
         vm.error = response;
@@ -25,6 +26,6 @@
   }
 
   angular.module('taxi')
-    .controller('LogInController', ['$state', 'logInService', LogInController]);
+    .controller('LogInController', ['$state', 'logInService', 'websocketService', LogInController]);
 
 })(window, window.angular);

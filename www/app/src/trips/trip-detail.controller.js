@@ -26,9 +26,8 @@
       if (status === TripStatus.STARTED) {
         data['driver'] = AccountModel.getUser();
       }
-      TripResource.update(trip.nk, data).then(function () {
-        vm.models.trip = Trip.getTripByNk(vm.models.trip.nk);
-      }, function () {});
+      var trip = _.merge(vm.models.trip, data);
+      TripResource.update(trip).then(function () {}, function () {});
     };
   }
 

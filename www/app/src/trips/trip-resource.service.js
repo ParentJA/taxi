@@ -2,7 +2,7 @@
 
   'use strict';
 
-  function TripResource($http, $q, BASE_URL, AccountModel, Trip) {
+  function TripResource($http, $q, BASE_URL, AccountModel, Trip, websocketService) {
     this.list = function list() {
       var deferred = $q.defer();
       var user = AccountModel.getUser();
@@ -24,14 +24,8 @@
 
     this.create = function create(trip) {
       var deferred = $q.defer();
-      var user = AccountModel.getUser();
 
-      $http.post(BASE_URL + 'trip/', trip, {
-        headers: {
-          Authorization: 'Token ' + user.auth_token
-        }
-      }).then(function (response) {
-        Trip.updateDict(response.data);
+      websocketService.send(trip).then(function () {
         deferred.resolve(Trip);
       }, function (response) {
         console.error('Failed to create trip.');
@@ -59,28 +53,22 @@
 
       return deferred.promise;
     };
-    
-    this.update = function update(nk, trip) {
-      var deferred = $q.defer();
-      var user = AccountModel.getUser();
 
-      $http.put(BASE_URL + 'trip/' + nk + '/', trip, {
-        headers: {
-          Authorization: 'Token ' + user.auth_token
-        }
-      }).then(function (response) {
-        Trip.updateDict(response.data);
+    this.update = function update(trip) {
+      var deferred = $q.defer();
+
+      websocketService.send(trip).then(function () {
         deferred.resolve(Trip);
       }, function (response) {
-        console.error('Failed to update trip with NK ' + nk + '.');
+        console.error('Failed to update trip with NK ' + trip.nk + '.');
         deferred.reject(response);
       });
 
       return deferred.promise;
-    }
+    };
   }
 
   angular.module('taxi')
-    .service('TripResource', ['$http', '$q', 'BASE_URL', 'AccountModel', 'Trip', TripResource]);
+    .service('TripResource', ['$http', '$q', 'BASE_URL', 'AccountModel', 'Trip', 'websocketService', TripResource]);
 
 })(window, window.angular);

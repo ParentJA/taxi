@@ -84,29 +84,29 @@ class TripView(RetrieveModelMixin, UpdateModelMixin, ListCreateAPIView):
     queryset = Trip.objects.all()
     serializer_class = TripSerializer
 
-    def perform_create(self, serializer):
-        trip = serializer.save()
-        driver = self.request.data.get('driver')
-        if driver:
-            driver.pop('groups')
-            trip.driver = get_user_model().objects.get(**driver)
-        trip.riders.add(self.request.user)
-        for rider in self.request.data.get('riders', []):
-            rider.pop('groups')
-            trip.riders.add(get_user_model().objects.get(**rider))
-        trip.save()
-
-    def perform_update(self, serializer):
-        trip = serializer.save()
-        driver = self.request.data.get('driver')
-        if driver:
-            driver.pop('groups')
-            trip.driver = get_user_model().objects.get(**driver)
-        trip.riders.add(self.request.user)
-        for rider in self.request.data.get('riders', []):
-            rider.pop('groups')
-            trip.riders.add(get_user_model().objects.get(**rider))
-        trip.save()
+    # def perform_create(self, serializer):
+    #     trip = serializer.save()
+    #     driver = self.request.data.get('driver')
+    #     if driver:
+    #         driver.pop('groups')
+    #         trip.driver = get_user_model().objects.get(**driver)
+    #     trip.riders.add(self.request.user)
+    #     for rider in self.request.data.get('riders', []):
+    #         rider.pop('groups')
+    #         trip.riders.add(get_user_model().objects.get(**rider))
+    #     trip.save()
+    #
+    # def perform_update(self, serializer):
+    #     trip = serializer.save()
+    #     driver = self.request.data.get('driver')
+    #     if driver:
+    #         driver.pop('groups')
+    #         trip.driver = get_user_model().objects.get(**driver)
+    #     trip.riders.add(self.request.user)
+    #     for rider in self.request.data.get('riders', []):
+    #         rider.pop('groups')
+    #         trip.riders.add(get_user_model().objects.get(**rider))
+    #     trip.save()
 
     def put(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)

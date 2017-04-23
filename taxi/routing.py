@@ -1,7 +1,3 @@
-# Standard library imports.
-
-# Django imports.
-
 # Third-party imports.
 from channels import route_class
 

@@ -13,6 +13,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
         fields = ('id', 'username', 'email',)
+        read_only_fields = ('username',)
 
 
 class PrivateUserSerializer(UserSerializer):
@@ -23,8 +24,34 @@ class PrivateUserSerializer(UserSerializer):
 
 
 class TripSerializer(serializers.ModelSerializer):
-    driver = UserSerializer(read_only=True)
-    riders = UserSerializer(many=True, read_only=True)
+    driver = UserSerializer(allow_null=True, required=False)
+    riders = UserSerializer(many=True, allow_null=True, required=False)
+
+    def create(self, validated_data):
+        user_model = get_user_model()
+        rider_data = validated_data.pop('riders', [])
+        driver_data = validated_data.pop('driver', None)
+        trip = Trip.objects.create(**validated_data)
+        for data in rider_data:
+            trip.riders.add(user_model.objects.get(**data))
+        if driver_data:
+            trip.driver = user_model.objects.get(**driver_data)
+        trip.save()
+        return trip
+
+    def update(self, instance, validated_data):
+        user_model = get_user_model()
+        rider_data = validated_data.pop('riders', [])
+        for data in rider_data:
+            instance.riders.add(user_model.objects.get(**data))
+        driver_data = validated_data.pop('driver', None)
+        if driver_data:
+            instance.driver = user_model.objects.get(**driver_data)
+        instance.pick_up_address = validated_data.get('pick_up_address', instance.pick_up_address)
+        instance.drop_off_address = validated_data.get('drop_off_address', instance.drop_off_address)
+        instance.status = validated_data.get('status', instance.status)
+        instance.save()
+        return instance
 
     class Meta:
         model = Trip

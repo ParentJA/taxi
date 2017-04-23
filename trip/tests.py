@@ -94,7 +94,7 @@ class TripTest(APITestCase):
             'pick_up_address': '310 P Street NW',
             'drop_off_address': '2445 M Street NW',
             'driver': None,
-            'riders': UserSerializer([self.user2, self.user3], many=True).data,
+            'riders': UserSerializer([self.user1, self.user2, self.user3], many=True).data,
         }, format='json')
         self.assertEqual(HTTP_201_CREATED, response.status_code)
         self.assertEqual('310 P Street NW', response.data.get('pick_up_address'))
