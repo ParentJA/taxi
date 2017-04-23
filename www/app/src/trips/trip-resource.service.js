@@ -68,8 +68,8 @@
         headers: {
           Authorization: 'Token ' + user.auth_token
         }
-      }).then(function () {
-        Trip.removeDict(nk);
+      }).then(function (response) {
+        Trip.updateDict(response.data);
         deferred.resolve(Trip);
       }, function (response) {
         console.error('Failed to update trip with NK ' + nk + '.');

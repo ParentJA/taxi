@@ -17,6 +17,10 @@
       return _.reject(trips, {status: TripStatus.COMPLETED});
     };
 
+    this.getTripsByFilter = function getTripsByFilter(filter) {
+      return _.filter(trips, filter);
+    };
+
     this.getTrips = function getTrips() {
       return trips;
     };

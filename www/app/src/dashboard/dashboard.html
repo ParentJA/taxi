@@ -14,7 +14,9 @@
            ng-repeat="trip in vm.getCurrentTrips()">
           <h4 class="list-group-item-heading">Requested: {{ vm.getCreated(trip) }}</h4>
           <p class="list-group-item-text">
-            <strong>{{ trip.pick_up_address }}</strong> to <strong>{{ trip.drop_off_address }}</strong><br>
+            <strong>{{ trip.pick_up_address }}</strong>
+            <i class="fa fa-arrow-right"></i>
+            <strong>{{ trip.drop_off_address }}</strong><br>
             Status: {{ trip.status }}
           </p>
         </a>
@@ -33,10 +35,13 @@
         You do not have any requested trips.
       </div>
       <div class="list-group text-center" ng-if="vm.getTripsByStatus('REQUESTED').length !== 0">
-        <a class="list-group-item disabled" ng-repeat="trip in vm.getTripsByStatus('REQUESTED')">
+        <a class="list-group-item" ng-repeat="trip in vm.getTripsByStatus('REQUESTED')"
+           ui-sref="app.trips.detail({tripNk: trip.nk})">
           <h4 class="list-group-item-heading">Requested: {{ vm.getCreated(trip) }}</h4>
           <p class="list-group-item-text">
-            <strong>{{ trip.pick_up_address }}</strong> to <strong>{{ trip.drop_off_address }}</strong><br>
+            <strong>{{ trip.pick_up_address }}</strong>
+            <i class="fa fa-arrow-right"></i>
+            <strong>{{ trip.drop_off_address }}</strong><br>
             Status: {{ trip.status }}
           </p>
         </a>
@@ -52,10 +57,13 @@
         You do not have any recent trips.
       </div>
       <div class="list-group text-center" ng-if="vm.getTripsByStatus('COMPLETED').length !== 0">
-        <a class="list-group-item disabled" ng-repeat="trip in vm.getTripsByStatus('COMPLETED')">
+        <a class="list-group-item" ng-repeat="trip in vm.getTripsByStatus('COMPLETED')"
+           ui-sref="app.trips.detail({tripNk: trip.nk})">
           <h4 class="list-group-item-heading">Requested: {{ vm.getCreated(trip) }}</h4>
           <p class="list-group-item-text">
-            <strong>{{ trip.pick_up_address }}</strong> to <strong>{{ trip.drop_off_address }}</strong><br>
+            <strong>{{ trip.pick_up_address }}</strong>
+            <i class="fa fa-arrow-right"></i>
+            <strong>{{ trip.drop_off_address }}</strong><br>
             Status: {{ trip.status }}
           </p>
         </a>

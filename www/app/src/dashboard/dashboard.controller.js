@@ -10,7 +10,17 @@
     };
 
     vm.getCurrentTrips = function getCurrentTrips() {
-      return Trip.getCurrentTrips();
+      var trips = Trip.getCurrentTrips();
+      if (vm.isRider()) {
+        return _.filter(trips, function (trip) {
+          return _.find(trip.riders, {id: vm.models.user.id});
+        });
+      }
+      if (vm.isDriver()) {
+        return _.filter(trips, function (trip) {
+          return trip.driver !== null && trip.driver.id === vm.models.user.id;
+        });
+      }
     };
 
     vm.getTripsByStatus = function getTripsByStatus(status) {
@@ -19,6 +29,10 @@
 
     vm.getCreated = function getCreated(trip) {
       return Trip.getCreated(trip);
+    };
+
+    vm.getTripsByFilter = function getTripsByFilter(filter) {
+      return Trip.getTripsByFilter(filter);
     };
 
     vm.isRider = function isRider() {

@@ -26,15 +26,12 @@
             <label>Password (again):</label>
             <input class="form-control" type="password" ng-model="vm.passwordAgain" required>
           </div>
-          <div class="radio-inline">
-            <label>
-              <input type="radio" ng-model="vm.group" name="group" value="driver"> Driver
-            </label>
-          </div>
-          <div class="radio-inline">
-            <label>
-              <input type="radio" ng-model="vm.group" name="group" value="rider"> Rider
-            </label>
+          <div class="form-group">
+            <label>Group:</label>
+            <select class="form-control" name="group" ng-model="vm.group" required>
+              <option value="rider">Rider</option>
+              <option value="driver">Driver</option>
+            </select>
           </div>
           <button class="btn btn-primary btn-block" type="submit"
                   ng-disabled="vm.form.$invalid || !vm.passwordsMatch()">Sign up</button>

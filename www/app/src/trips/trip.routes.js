@@ -29,7 +29,7 @@
         },
         resolve: {
           trip: function ($stateParams, Trip, TripResource) {
-            var tripNk = _.parseInt($stateParams.tripNk);
+            var tripNk = $stateParams.tripNk;
             var trip = Trip.getTripByNk(tripNk);
             if (trip) {
               return trip;
