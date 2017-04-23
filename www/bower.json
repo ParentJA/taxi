@@ -1,0 +1,31 @@
+{
+  "name": "taxi",
+  "authors": [
+    "Jason Parent <jason.a.parent@gmail.com>"
+  ],
+  "description": "A ride-sharing app.",
+  "main": "index.html",
+  "license": "MIT",
+  "homepage": "",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "angular": "~1.5.0",
+    "angular-animate": "~1.5.0",
+    "angular-bootstrap": "~1.1.2",
+    "angular-growl-v2": "^0.7.9",
+    "angular-ui-router": "~0.2.18",
+    "angular-websocket": "^2.0.0",
+    "bootstrap": "~3.3.6",
+    "bootswatch": "~3.3.6",
+    "font-awesome": "~4.5.0",
+    "lodash": "~4.5.1",
+    "moment": "momentjs#~2.11.2"
+  }
+}

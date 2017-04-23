@@ -1,0 +1,66 @@
+<div class="row">
+  <div class="col-lg-12">
+
+    <!-- Current Trips -->
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h4 class="panel-title">Current Trips</h4>
+      </div>
+      <div class="panel-body text-center" ng-if="vm.getCurrentTrips().length === 0">
+        You are not currently on a trip.
+      </div>
+      <div class="list-group text-center" ng-if="vm.getCurrentTrips().length !== 0">
+        <a class="list-group-item" ui-sref="app.trips.detail({tripNk: trip.nk})"
+           ng-repeat="trip in vm.getCurrentTrips()">
+          <h4 class="list-group-item-heading">Requested: {{ vm.getCreated(trip) }}</h4>
+          <p class="list-group-item-text">
+            <strong>{{ trip.pick_up_address }}</strong> to <strong>{{ trip.drop_off_address }}</strong><br>
+            Status: {{ trip.status }}
+          </p>
+        </a>
+      </div>
+      <div class="panel-footer" ng-if="vm.isRider() && vm.getCurrentTrips().length === 0">
+        <button class="btn btn-primary btn-block" ui-sref="app.trips.request">Request a trip</button>
+      </div>
+    </div>
+
+    <!-- Requested Trips -->
+    <div class="panel panel-default" ng-if="vm.isDriver() && vm.getCurrentTrips().length === 0">
+      <div class="panel-heading">
+        <h4 class="panel-title">Requested Trips</h4>
+      </div>
+      <div class="panel-body text-center" ng-if="vm.getTripsByStatus('REQUESTED').length === 0">
+        You do not have any requested trips.
+      </div>
+      <div class="list-group text-center" ng-if="vm.getTripsByStatus('REQUESTED').length !== 0">
+        <a class="list-group-item disabled" ng-repeat="trip in vm.getTripsByStatus('REQUESTED')">
+          <h4 class="list-group-item-heading">Requested: {{ vm.getCreated(trip) }}</h4>
+          <p class="list-group-item-text">
+            <strong>{{ trip.pick_up_address }}</strong> to <strong>{{ trip.drop_off_address }}</strong><br>
+            Status: {{ trip.status }}
+          </p>
+        </a>
+      </div>
+    </div>
+
+    <!-- Recent Trips -->
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h4 class="panel-title">Recent Trips</h4>
+      </div>
+      <div class="panel-body text-center" ng-if="vm.getTripsByStatus('COMPLETED').length === 0">
+        You do not have any recent trips.
+      </div>
+      <div class="list-group text-center" ng-if="vm.getTripsByStatus('COMPLETED').length !== 0">
+        <a class="list-group-item disabled" ng-repeat="trip in vm.getTripsByStatus('COMPLETED')">
+          <h4 class="list-group-item-heading">Requested: {{ vm.getCreated(trip) }}</h4>
+          <p class="list-group-item-text">
+            <strong>{{ trip.pick_up_address }}</strong> to <strong>{{ trip.drop_off_address }}</strong><br>
+            Status: {{ trip.status }}
+          </p>
+        </a>
+      </div>
+    </div>
+
+  </div>
+</div>
