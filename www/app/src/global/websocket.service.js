@@ -6,7 +6,8 @@
     var websocket = {};
 
     this.connect = function connect() {
-      websocket = $websocket('ws://localhost:8000/status/');
+      var url = AccountModel.isRider() ? 'ws://localhost:8000/rider/' : 'ws://localhost:8000/driver/';
+      websocket = $websocket(url);
       websocket.onOpen(onConnect);
       websocket.onMessage(onReceive);
       websocket.onClose(onDisconnect);

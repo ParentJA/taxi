@@ -63,7 +63,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'taxi.wsgi.application'
+WSGI_APPLICATION = 'taxi.asgi.application'
 
 DATABASES = {
     'default': {

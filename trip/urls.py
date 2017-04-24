@@ -2,11 +2,9 @@
 from django.conf.urls import url
 
 # Local imports.
-from .apis import UserListView, TripView, TripStatusView
+from .apis import TripView
 
 urlpatterns = [
-    url(r'users/$', UserListView.as_view(), name='user_list'),
-    url(r'^$', TripView.as_view(), name='trip_list'),
-    url(r'^(?P<trip_nk>\w+)/$', TripView.as_view(), name='trip_detail'),
-    url(r'^(?P<trip_nk>\w+)/status/$', TripStatusView.as_view(), name='trip_status'),
+    url(r'^$', TripView.as_view({'get': 'list'}), name='trip_list'),
+    url(r'^(?P<trip_nk>\w+)/$', TripView.as_view({'get': 'retrieve'}), name='trip_detail'),
 ]
