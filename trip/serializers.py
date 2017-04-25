@@ -1,6 +1,5 @@
 # Django imports.
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Group
 
 # Third-party imports.
 from rest_framework import serializers

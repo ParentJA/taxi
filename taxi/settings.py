@@ -10,7 +10,6 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 DJANGO_APPS = [
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -21,10 +20,7 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
-    'django_filters',
-    'django_extensions',
     'channels',
-    'channels.delay',
 ]
 
 LOCAL_APPS = [

@@ -4,64 +4,55 @@ from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 from django.contrib.auth.models import Group
 
 # Third-party imports.
-from django_filters.rest_framework.backends import DjangoFilterBackend
+from rest_framework import permissions, status, views, viewsets
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_204_NO_CONTENT, HTTP_400_BAD_REQUEST
-from rest_framework.views import APIView
-from rest_framework.viewsets import ReadOnlyModelViewSet
 
 # Local imports.
 from .models import Trip
 from .serializers import TripSerializer, PrivateUserSerializer
 
 
-class SignUpView(APIView):
-    permission_classes = (AllowAny,)
-
+class SignUpView(views.APIView):
     def post(self, *args, **kwargs):
+        email = self.request.data.get('email')
         group = self.request.data.get('group', 'rider')
         user_group, _ = Group.objects.get_or_create(name=group)
         form = UserCreationForm(data=self.request.data)
         if form.is_valid():
             user = form.save()
-            user.email = self.request.data.get('email')
+            user.email = email
             user.groups.add(user_group)
             user.save()
-            return Response(status=HTTP_201_CREATED, data=PrivateUserSerializer(user).data)
+            return Response(PrivateUserSerializer(user).data)
         else:
-            return Response(status=HTTP_400_BAD_REQUEST, data=form.errors)
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class LogInView(APIView):
-    permission_classes = (AllowAny,)
-
+class LogInView(views.APIView):
     def post(self, *args, **kwargs):
         form = AuthenticationForm(data=self.request.data)
         if form.is_valid():
             user = form.get_user()
             login(self.request, user)
             Token.objects.get_or_create(user=user)
-            return Response(status=HTTP_200_OK, data=PrivateUserSerializer(user).data)
+            return Response(PrivateUserSerializer(user).data)
         else:
-            return Response(status=HTTP_400_BAD_REQUEST, data=form.errors)
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class LogOutView(APIView):
-    permission_classes = (IsAuthenticated,)
+class LogOutView(views.APIView):
+    permission_classes = (permissions.IsAuthenticated,)
 
     def post(self, *args, **kwargs):
         Token.objects.get(user=self.request.user).delete()
         logout(self.request)
-        return Response(status=HTTP_204_NO_CONTENT)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class TripView(ReadOnlyModelViewSet):
-    filter_backends = (DjangoFilterBackend,)
-    filter_fields = ('status',)
+class TripView(viewsets.ReadOnlyModelViewSet):
     lookup_field = 'nk'
     lookup_url_kwarg = 'trip_nk'
-    permission_classes = (IsAuthenticated,)
+    permission_classes = (permissions.IsAuthenticated,)
     queryset = Trip.objects.all()
     serializer_class = TripSerializer
