@@ -27,7 +27,7 @@ class Trip(models.Model):
     drop_off_address = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=TRIP_STATUSES, default=REQUESTED)
     driver = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='trips_as_driver')
-    riders = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='trips_as_rider')
+    rider = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='trips_as_rider')
 
     def save(self, **kwargs):
         if not self.nk:

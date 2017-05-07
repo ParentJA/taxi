@@ -24,7 +24,7 @@ class SignUpView(views.APIView):
             user.email = email
             user.groups.add(user_group)
             user.save()
-            return Response(PrivateUserSerializer(user).data)
+            return Response(PrivateUserSerializer(user).data, status=status.HTTP_201_CREATED)
         else:
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 

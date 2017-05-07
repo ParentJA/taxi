@@ -44,7 +44,7 @@ class SignUpView(views.APIView):
             user.email = email
             user.groups.add(user_group)
             user.save()
-            return Response(PrivateUserSerializer(user).data)
+            return Response(PrivateUserSerializer(user).data, status=status.HTTP_201_CREATED)
         else:
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 ```
@@ -153,7 +153,7 @@ class Trip(models.Model):
     drop_off_address = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=TRIP_STATUSES, default=REQUESTED)
     driver = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='trips_as_driver')
-    riders = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='trips_as_rider')
+    rider = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='trips_as_rider')
 
     def save(self, **kwargs):
         if not self.nk:
@@ -183,12 +183,12 @@ class PrivateUserSerializer(serializers.ModelSerializer): ...
 
 class TripSerializer(serializers.ModelSerializer):
     driver = UserSerializer(allow_null=True, required=False)
-    riders = UserSerializer(many=True, allow_null=True, required=False)
+    rider = UserSerializer(allow_null=True, required=False)
 
     class Meta:
         model = Trip
         fields = ('id', 'nk', 'created', 'updated', 'pick_up_address', 'drop_off_address', 'status', 'driver',
-                  'riders',)
+                  'rider',)
         read_only_fields = ('id', 'nk', 'created', 'updated',)
 ```
 
@@ -270,15 +270,15 @@ class PrivateUserSerializer(serializers.ModelSerializer): ...
 
 class TripSerializer(serializers.ModelSerializer):
     driver = UserSerializer(allow_null=True, required=False)
-    riders = UserSerializer(many=True, allow_null=True, required=False)
+    rider = UserSerializer(allow_null=True, required=False)
 
     def create(self, validated_data):
         user_model = get_user_model()
-        rider_data = validated_data.pop('riders', [])
+        rider_data = validated_data.pop('rider', None)
         driver_data = validated_data.pop('driver', None)
         trip = Trip.objects.create(**validated_data)
-        for data in rider_data:
-            trip.riders.add(user_model.objects.get(**data))
+        if rider_data:
+            trip.rider = user_model.objects.get(**rider_data)
         if driver_data:
             trip.driver = user_model.objects.get(**driver_data)
         trip.save()
@@ -287,7 +287,7 @@ class TripSerializer(serializers.ModelSerializer):
     class Meta:
         model = Trip
         fields = ('id', 'nk', 'created', 'updated', 'pick_up_address', 'drop_off_address', 'status', 'driver',
-                  'riders',)
+                  'rider',)
         read_only_fields = ('id', 'nk', 'created', 'updated',)
 ```
 
@@ -365,15 +365,15 @@ class PrivateUserSerializer(serializers.ModelSerializer): ...
 
 class TripSerializer(serializers.ModelSerializer):
     driver = UserSerializer(allow_null=True, required=False)
-    riders = UserSerializer(many=True, allow_null=True, required=False)
+    rider = UserSerializer(allow_null=True, required=False)
 
     def create(self, validated_data): ...
 
     def update(self, instance, validated_data):
         user_model = get_user_model()
-        rider_data = validated_data.pop('riders', [])
-        for data in rider_data:
-            instance.riders.add(user_model.objects.get(**data))
+        rider_data = validated_data.pop('rider', None)
+        if rider_data:
+            instance.rider = user_model.objects.get(**rider_data)
         driver_data = validated_data.pop('driver', None)
         if driver_data:
             instance.driver = user_model.objects.get(**driver_data)
@@ -386,7 +386,7 @@ class TripSerializer(serializers.ModelSerializer):
     class Meta:
         model = Trip
         fields = ('id', 'nk', 'created', 'updated', 'pick_up_address', 'drop_off_address', 'status', 'driver',
-                  'riders',)
+                  'rider',)
         read_only_fields = ('id', 'nk', 'created', 'updated',)
 ```
 
