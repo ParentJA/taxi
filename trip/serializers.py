@@ -3,23 +3,23 @@ from rest_framework import serializers
 from .models import Trip
 
 
-class UserSerializer(serializers.ModelSerializer):
+class PublicUserSerializer(serializers.ModelSerializer):
+    groups = serializers.SlugRelatedField(slug_field='name', many=True, read_only=True)
+
     class Meta:
         model = get_user_model()
-        fields = ('id', 'username',)
+        fields = ('id', 'username', 'groups',)
         read_only_fields = ('username',)
 
 
-class PrivateUserSerializer(UserSerializer):
-    groups = serializers.SlugRelatedField(slug_field='name', many=True, read_only=True)
-
-    class Meta(UserSerializer.Meta):
-        fields = list(UserSerializer.Meta.fields) + ['auth_token', 'groups']
+class PrivateUserSerializer(PublicUserSerializer):
+    class Meta(PublicUserSerializer.Meta):
+        fields = list(PublicUserSerializer.Meta.fields) + ['auth_token']
 
 
 class TripSerializer(serializers.ModelSerializer):
-    driver = UserSerializer(allow_null=True, required=False)
-    rider = UserSerializer(allow_null=True, required=False)
+    driver = PublicUserSerializer(allow_null=True, required=False)
+    rider = PublicUserSerializer(allow_null=True, required=False)
 
     def create(self, validated_data):
         driver_data = validated_data.pop('driver', None)

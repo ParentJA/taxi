@@ -6,7 +6,7 @@ from rest_framework.reverse import reverse
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_204_NO_CONTENT
 from rest_framework.test import APIClient, APITestCase
 from .models import Trip
-from .serializers import TripSerializer, PrivateUserSerializer, UserSerializer
+from .serializers import PublicUserSerializer, PrivateUserSerializer, TripSerializer
 
 PASSWORD = 'pAssw0rd!'
 
@@ -23,12 +23,11 @@ class AuthenticationTest(APITestCase):
         response = self.client.post(reverse('sign_up'), data={
             'username': 'user@example.com',
             'password1': PASSWORD,
-            'password2': PASSWORD,
-            'group': 'rider',
+            'password2': PASSWORD
         })
         user = get_user_model().objects.last()
         self.assertEqual(HTTP_201_CREATED, response.status_code)
-        self.assertEqual(PrivateUserSerializer(user).data, response.data)
+        self.assertEqual(PublicUserSerializer(user).data, response.data)
 
     def test_user_can_log_in(self):
         user = create_user()
@@ -50,7 +49,7 @@ class AuthenticationTest(APITestCase):
         self.assertFalse(Token.objects.filter(user=user).exists())
 
 
-class TripTest(APITestCase):
+class HttpTripTest(APITestCase):
     def setUp(self):
         user = create_user()
         token = Token.objects.create(user=user)
@@ -96,7 +95,7 @@ class WebSocketTripTest(ChannelTestCase):
             'text': {
                 'pick_up_address': pick_up_address,
                 'drop_off_address': drop_off_address,
-                'rider': UserSerializer(rider).data
+                'rider': PublicUserSerializer(rider).data
             }
         })
         return client
@@ -109,7 +108,7 @@ class WebSocketTripTest(ChannelTestCase):
                 'pick_up_address': trip.pick_up_address,
                 'drop_off_address': trip.drop_off_address,
                 'status': status,
-                'driver': UserSerializer(driver).data
+                'driver': PublicUserSerializer(driver).data
             }
         })
         return client

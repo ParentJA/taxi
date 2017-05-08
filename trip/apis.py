@@ -5,7 +5,7 @@ from rest_framework import permissions, status, views, viewsets
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from .models import Trip
-from .serializers import TripSerializer, PrivateUserSerializer
+from .serializers import PublicUserSerializer, PrivateUserSerializer, TripSerializer
 
 
 class SignUpView(views.APIView):
@@ -17,7 +17,7 @@ class SignUpView(views.APIView):
             user = form.save()
             user.groups.add(user_group)
             user.save()
-            return Response(PrivateUserSerializer(user).data, status=status.HTTP_201_CREATED)
+            return Response(PublicUserSerializer(user).data, status=status.HTTP_201_CREATED)
         else:
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 
