@@ -4,9 +4,11 @@
 
 ## Authentication
 
-Authentication is the cornerstone of any app that handles user data. 
+Authentication is the cornerstone of any app that handles user data. It allows users to maintain privacy within the app, while gaining access to the full set of features afforded with registration.
 
-Let's start by setting up our app to authenticate with tokens.
+With Django REST Framework (DRF), we have three authentication classes to choose from: `BasicAuthentication`, `TokenAuthentication`, and `SessionAuthentication`. We can eliminate `BasicAuthentication` right off the bat because it doesn't offer enough security for production environments. Between the remaining two classes, we choose `TokenAuthentication` because it offers the best support for both desktop and mobile clients. The idea is simple--the server generates a token for a user on login and that token can be used from any device to gain access to protected APIs.
+
+Let's start by setting up our app to allow token-based authentication. We install the `rest_framework` and `rest_framework.authtoken` apps and we tell DRF to use `TokenAuthentication` by default.
 
 **taxi/settings.py**
 
@@ -39,13 +41,17 @@ REST_FRAMEWORK = {
 }
 ```
 
-Running the `migrate` management command will install the authentication tables we need.
+We need to run the `migrate` management command to set up our database and install the DRF authentication tables.
 
 ```bash
 $ python manage.py migrate
 ```
 
-Now, we can test our first bit of authentication functionality--signing up a new user. Note that we are only testing the happy paths. Adding tests for error handling is a separate exercise left to the reader.
+During the course of this tutorial, we are going to be following test-driven development (TDD) to confirm that our code works. In the next part of the tutorial, we will be adding a user interface so that we can play with the app as an actual user.
+
+Let's start by creating a new user account via an API. A user should be able to download our app and immediately sign up for a new account by providing the bare minimum of information--a username and a password. The distinction between `password1` and `password2` correlates to a user entering her password and then confirming it. Eventually, our app will present the user with a form with username and password fields and a submit button. 
+
+Note that throughout this tutorial, we will only be testing the happy paths. Adding tests for error handling is a separate exercise left to the reader.
 
 **trip/tests.py**
 
@@ -74,13 +80,15 @@ class AuthenticationTest(APITestCase):
         self.assertEqual(PublicUserSerializer(user).data, response.data)
 ```
 
-Run the tests and pay attention to where they fail.
+A couple things to note: 1) we expect our API to return a 201 status code when the user account is created, and 2) we are leveraging DRF's serializers to convert between objects and JSON strings. We expect the response payload to be a JSON-serialized user account.
+
+When we run our first test, it fails. Remember, a tenant of TDD is that we should write failing tests before writing the code to get them to pass. 
 
 ```bash
 $ python manage.py test trip.tests
 ```
 
-We're creating a very basic user with only an ID, username, and password. Of course, the password should never be serialized.
+We need to create several pieces of code before our tests will pass. Typically, a data model is the first thing we want to create in a situation like this, however, we are leveraging Django's user model for simplicity so there is no reason to create that code. In this case, the first bit of code we create is the user serializer. Remember, right now our user data is basic (username and password), so we only need access to a couple of fields. We should never need to read the password.
 
 **trip/serializers.py**
 
@@ -95,7 +103,7 @@ class PublicUserSerializer(serializers.ModelSerializer):
         fields = ('id', 'username',)
 ```
 
-Our sign up function is simple. Create the user based on the data provided by the user (username and password). If all goes well, pass back a success message, or else, return the form errors.
+The simplicity of our user data is reflected in our `SignUpView`. We pass the data to Django's `UserCreationForm`, which expects only username and password. If the form is valid, we save the user and pass the serialized data back to the client with a success status. If the form validation fails, we pass back the errors with an error. Form validation could fail if the username is already taken or the password isn't strong enough.
 
 **trip/apis.py**
 
@@ -116,7 +124,7 @@ class SignUpView(views.APIView):
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 ```
 
-Add the corresponding URL.
+We finish our task by configuring a URL to link to our view.
 
 **taxi/urls.py**
 
@@ -129,13 +137,13 @@ urlpatterns = [
 ]
 ```
 
-Run the tests again.
+Now, when we run the tests, they pass!
 
 ```bash
 $ python manage.py test trip.tests
 ```
 
-Now that we can sign up a new user, let's create functionality to log the user in and out. We start with two new tests. We create a helper function `create_user()` to keep the code DRY. When a user logs in, the system should create a corresponding token. By including that token in the request headers, the user can access other APIs. The token should be deleted when the user logs out.
+Now that we can sign up a new user, the next logical step is to create the functionality to log the user in and out. We start with two new tests to handle the log in and log out behavior respectively. Note that we also added a `create_user()` helper function to help keep our code DRY. When a user logs in, the server should create a token for that user. By including that token in the request headers of future requests, the user can access other APIs. The token should be deleted when the user logs out.
 
 **trip/tests.py**
 
@@ -173,13 +181,17 @@ class AuthenticationTest(APITestCase):
         self.assertFalse(Token.objects.filter(user=user).exists())
 ```
 
+The process of logging in is as easy as signing up. The user enters her username and password and submits them to the server. We expect the server to log the user in and then return a success status along with the serialized user data. At this point, we can confirm that a token has been created for the user.
+
+Logging out is even simpler. The user should be logged out when she hits the appropriate API and her token should be deleted.
+
 Run the tests and watch them fail.
 
 ```bash
 $ python manage.py test trip.tests
 ```
 
-We should have two separate user serializers--public and private. When a user logs in, he should be able to extract his token from the response data. When users view information about each other, they should not see that token. We run our app over HTTPS, so there is no concern about someone stealing our token from the response payload.
+Now that tokens are being created, we should have two different user serializers--one for public consumption and one for private use. Only the logged-in user should be able to receive her token. Other users can see each others' basic information, but that's it! We serve our app over HTTPS, so there is little concern about someone stealing our token from our private response payload.
 
 **trip/serializers.py**
 
@@ -188,13 +200,14 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 
-class PrivateUserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = get_user_model()
-        fields = ('id', 'username', 'auth_token',)
+class PrivateUserSerializer(PublicUserSerializer):
+    class Meta(PublicUserSerializer.Meta):
+        fields = list(PublicUserSerializer.Meta.fields) + ['auth_token']
 ```
 
-We execute our log in and log out functions as we planned in the tests. Note that we create a token with the `get_or_create()` function, so that if a user hits the log in API more than once, we don't generate a new token each time.
+We program our log in and log out functions as we planned in the tests. Let's break each view down. In our `LogInView`, we leverage Django's `AuthenticationForm`, which expects username and password data to be provided. We validate the form to get an existing user and then we log that user in. Next, we create a token. Note that using `get_or_create()` allows us to avoid having to generate a new token every time a logged-in user hits the "log in" API.
+
+Our `LogOutView` does the opposite of the `LogInView`; it logs the user out and deletes her token. We add an `IsAuthenticated` permission to ensure that only logged-in users can log out.
 
 **trip/apis.py**
 
@@ -228,7 +241,7 @@ class LogOutView(views.APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 ```
 
-We add our new URLs to the existing configuration.
+We link our new views to URLs in the existing configuration.
 
 **taxi/urls.py**
 
@@ -243,7 +256,7 @@ urlpatterns = [
 ]
 ```
 
-We run our authentication tests one last time to make sure they pass.
+We run our authentication tests one last time to make sure they pass. Our authentication work is done!
 
 ```bash
 $ python manage.py test trip.tests
@@ -251,9 +264,9 @@ $ python manage.py test trip.tests
 
 ## HTTP
 
-Even though we plan to use WebSockets for user-to-user communication, we will also use plain old HTTP requests to get the current state of our data.
+After a user logs in, she should be taken to a dashboard that displays an overview of her user-related data. Even though we plan to use WebSockets for user-to-user communication, we still have a use for run-of-the-mill HTTP requests. Users should be able to query the server for information about their past, present, and future trips. Up-to-date information is vital to understanding where the user has travelled from or for planning where she is travelling next.
 
-In our first test, we make sure our user can see all of the trips associated with his account. We will filter the trips based on the user's account later, but for now, let's allow any user to see all of the existing trips. Note that we are using a token to authenticate the user.
+Our HTTP-related tests capture these scenarios. First, let's add a feature to let a user view all of the trips associated with her account. As an initial step, we will allow a user to see all existing trips; later on in this tutorial, we will add better filtering. 
 
 **trip/tests.py**
 
@@ -273,7 +286,6 @@ class HttpTripTest(APITestCase):
         token = Token.objects.create(user=user)
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
-        self.client.login(username=user.username, password=PASSWORD)
 
     def test_user_can_list_trips(self):
         trips = [
@@ -285,13 +297,15 @@ class HttpTripTest(APITestCase):
         self.assertEqual(TripSerializer(trips, many=True).data, response.data)
 ```
 
-Run the tests to see them fail.
+As you can see, we are authenticating the user with her token via an authorization header. Our test creates two trips and then makes a call to the "trip list" API, which should successfully return the trip data.
+
+For now, as tests fail.
 
 ```bash
 $ python manage.py test trip.tests
 ```
 
-We need to create a model that represents the concept of a trip. We should have a consistent way to identify trips. A natural key based on the created timestamp and the pick-up and drop-off addresses is a good way to use unique identification that will be hard to guess. We need to track when the trip is created and updated. We need to store the pick-up and drop-off addresses. And we need to know the current status of the trip.
+We have a lot of work to do in order to get the tests passing. First, we need to create a model that represents the concept of a trip. A trip is simply a transportation event between a starting location and a destination, so we should keep track of a pick-up address and a drop-off address. At any given point in time, a trip can be in a specific state, so we should add a status to identify whether a trip is requested, started, in progress, or completed. Lastly, we should have a consistent way to identify and track our trips that is also difficult for someone to guess. We can use an MD5 hash as a natural key for our `Trip` model.
 
 **trip/models.py**
 
@@ -336,14 +350,16 @@ class Trip(models.Model):
         super().save(**kwargs)
 ```
 
-Let's make migrations and run them to create the `Trip` model table.
+We want our model to generate natural keys on its own, based on the time that the record is created and the pick-up and drop-off addresses. We will enforce this later on with our `Trip` serializer.
+
+Let's make a migration for our new model and run it to create the corresponding table.
 
 ```bash
 $ python manage.py makemigrations
 $ python manage.py migrate
 ```
 
-We need a way to serialize the trip data to pass it between the client and the server. We want the server to be responsible for creating the `id`, `nk`, `created`, and `updated` fields.
+Like the user data, we need a way to serialize the trip data to pass it between the client and the server. By identifying certain fields as "read only", we can ensure that they will never be created or updated via the serializer. In this case, we want the server to be responsible for creating the `id`, `nk`, `created`, and `updated` fields.
 
 **trip/serializers.py**
 
@@ -359,7 +375,7 @@ class TripSerializer(serializers.ModelSerializer):
         read_only_fields = ('id', 'nk', 'created', 'updated',)
 ```
 
-Our view is super simple. We leverage the `ReadOnlyModelViewSet` to support our trip list and trip detail views. For now, our view will return all trips.
+As you can see, our `TripView` is incredibly basic. We leverage the DRF `ReadOnlyModelViewSet` to support our trip list and trip detail views. For now, our view will return all trips. Note that like the `LogOutView`, a user needs to be authenticated in order to access this API.
 
 **trip/apis.py**
 
@@ -375,7 +391,7 @@ class TripView(viewsets.ReadOnlyModelViewSet):
     serializer_class = TripSerializer
 ```
 
-We add our trip-based URL configuration to the main URL file.
+We include our trip-specific URL configuration in the main `urls.py` file.
 
 **taxi/urls.py**
 
@@ -391,7 +407,7 @@ urlpatterns = [
 ]
 ```
 
-And we create our first trip-based URL to return a list of trips.
+Our first trip-specific URL enables our `TripView` to provide a list of trips.
 
 **trip/urls.py**
 
@@ -404,13 +420,13 @@ urlpatterns = [
 ]
 ```
 
-When we run our tests again, everything succeeds.
+When we run our tests again, we get our list of trips.
 
 ```bash
 $ python manage.py test trip.tests
 ```
 
-For our final HTTP test, we support the trip detail feature. Our intention is for our client to be able to retrieve the details of a trip by it's natural key (NK) value.
+Our next and last HTTP test covers the trip detail feature. With this feature, users are able to retrieve the details of a trip identified by it's natural key (`nk`) value.
 
 **trip/tests.py**
 
@@ -429,13 +445,15 @@ class HttpTripTest(APITestCase):
         self.assertEqual(TripSerializer(trip).data, response.data)
 ```
 
-Of course, we first create a failing test.
+We leverage the use of the handy `get_absolute_url()` function on our `Trip` model to identify the location of our `Trip` resource. We expect to get the serialized data of a single trip and a success status.
+
+Of course, we create a failing test to begin.
 
 ```bash
 $ python manage.py test trips.tests
 ```
 
-We expand our existing `TripView` with two new fields to identify the model field to use for the lookup.
+Supporting our new functionality is as easy as adding two variables to our `TripView`. The `lookup_field` variable tells the view to get the trip record by its `nk` value. The `lookup_url_kwarg` variable tells the view what named parameter to use to extract the `nk` value from the URL.
 
 **trip/apis.py**
 
@@ -453,7 +471,7 @@ class TripView(viewsets.ReadOnlyModelViewSet):
     serializer_class = TripSerializer
 ```
 
-We add a configuration to extract the trip's natural key from the URL.
+In our URL configuration, we identify a `trip_nk` that should be 32 characters long, which is the length of the MD5 hash. We link our `TripView` with our new URL.
 
 **trip/urls.py**
 
@@ -467,7 +485,7 @@ urlpatterns = [
 ]
 ```
 
-Running the tests again reveals success.
+We achieve success when we run our tests again.
 
 ```bash
 $ python manage.py test trip.tests

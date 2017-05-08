@@ -4,8 +4,7 @@
 
   function SignUpController($state, signUpService) {
     var vm = this;
-    
-    vm.email = null;
+
     vm.error = {};
     vm.form = '';
     vm.group = 'rider';
@@ -18,7 +17,7 @@
     };
 
     vm.onSubmit = function onSubmit() {
-      signUpService(vm.username, vm.email, vm.password, vm.group).then(function () {
+      signUpService(vm.username, vm.password, vm.group).then(function () {
         $state.go('log_in');
       }, function (response) {
         vm.error = response;

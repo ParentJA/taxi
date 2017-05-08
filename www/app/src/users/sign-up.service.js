@@ -3,11 +3,10 @@
   'use strict';
 
   function signUpService($http, $q, BASE_URL, AccountModel) {
-    return function (username, email, password, group) {
+    return function (username, password, group) {
       var deferred = $q.defer();
       $http.post(BASE_URL + 'sign_up/', {
         username: username,
-        email: email,
         password1: password,
         password2: password,
         group: group

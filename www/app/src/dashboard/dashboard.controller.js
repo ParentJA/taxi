@@ -13,7 +13,7 @@
       var trips = Trip.getCurrentTrips();
       if (vm.isRider()) {
         return _.filter(trips, function (trip) {
-          return _.find(trip.riders, {id: vm.models.user.id});
+          return _.find(trip.rider, {id: vm.models.user.id});
         });
       }
       if (vm.isDriver()) {

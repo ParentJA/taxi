@@ -18,7 +18,7 @@
       TripResource.create({
         drop_off_address: vm.dropOffAddress,
         pick_up_address: vm.pickUpAddress,
-        riders: [AccountModel.getUser()]
+        rider: AccountModel.getUser()
       }).then(function () {
         $state.go('app.dashboard');
       }, function (response) {
