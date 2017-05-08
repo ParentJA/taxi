@@ -475,7 +475,6 @@ $ python manage.py migrate
 ```python
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from .models import Trip
 
 
 class PublicUserSerializer(serializers.ModelSerializer):
@@ -497,7 +496,7 @@ class TripSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         driver_data = validated_data.pop('driver', None)
         rider_data = validated_data.pop('rider', None)
-        trip = Trip.objects.create(**validated_data)
+        trip = super().create(validated_data)
         if driver_data:
             trip.driver = get_user_model().objects.get(**driver_data)
         if rider_data:
@@ -707,10 +706,7 @@ class TripSerializer(serializers.ModelSerializer):
         rider_data = validated_data.pop('rider', None)
         if rider_data:
             instance.rider = get_user_model().objects.get(**rider_data)
-        instance.pick_up_address = validated_data.get('pick_up_address', instance.pick_up_address)
-        instance.drop_off_address = validated_data.get('drop_off_address', instance.drop_off_address)
-        instance.status = validated_data.get('status', instance.status)
-        instance.save()
+        instance = super().update(instance, validated_data)
         return instance
 ```
 

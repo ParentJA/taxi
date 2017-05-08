@@ -22,29 +22,24 @@ class TripSerializer(serializers.ModelSerializer):
     rider = UserSerializer(allow_null=True, required=False)
 
     def create(self, validated_data):
-        user_model = get_user_model()
-        rider_data = validated_data.pop('rider', None)
         driver_data = validated_data.pop('driver', None)
-        trip = Trip.objects.create(**validated_data)
-        if rider_data:
-            trip.rider = user_model.objects.get(**rider_data)
+        rider_data = validated_data.pop('rider', None)
+        trip = super().create(validated_data)
         if driver_data:
-            trip.driver = user_model.objects.get(**driver_data)
+            trip.driver = get_user_model().objects.get(**driver_data)
+        if rider_data:
+            trip.rider = get_user_model().objects.get(**rider_data)
         trip.save()
         return trip
 
     def update(self, instance, validated_data):
-        user_model = get_user_model()
-        rider_data = validated_data.pop('rider', None)
-        if rider_data:
-            instance.rider = user_model.objects.get(**rider_data)
         driver_data = validated_data.pop('driver', None)
         if driver_data:
-            instance.driver = user_model.objects.get(**driver_data)
-        instance.pick_up_address = validated_data.get('pick_up_address', instance.pick_up_address)
-        instance.drop_off_address = validated_data.get('drop_off_address', instance.drop_off_address)
-        instance.status = validated_data.get('status', instance.status)
-        instance.save()
+            instance.driver = get_user_model().objects.get(**driver_data)
+        rider_data = validated_data.pop('rider', None)
+        if rider_data:
+            instance.rider = get_user_model().objects.get(**rider_data)
+        instance = super().update(instance, validated_data)
         return instance
 
     class Meta:
