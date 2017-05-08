@@ -9,7 +9,7 @@ from .serializers import TripSerializer, PrivateUserSerializer
 
 
 class SignUpView(views.APIView):
-    def post(self):
+    def post(self, *args, **kwargs):
         group = self.request.data.get('group', 'rider')
         user_group, _ = Group.objects.get_or_create(name=group)
         form = UserCreationForm(data=self.request.data)
@@ -23,7 +23,7 @@ class SignUpView(views.APIView):
 
 
 class LogInView(views.APIView):
-    def post(self):
+    def post(self, *args, **kwargs):
         form = AuthenticationForm(data=self.request.data)
         if form.is_valid():
             user = form.get_user()
@@ -37,7 +37,7 @@ class LogInView(views.APIView):
 class LogOutView(views.APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
-    def post(self):
+    def post(self, *args, **kwargs):
         Token.objects.get(user=self.request.user).delete()
         logout(self.request)
         return Response(status=status.HTTP_204_NO_CONTENT)
