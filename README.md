@@ -1,3 +1,67 @@
+## Authentication
+
+**taxi/settings.py**
+
+```python
+ALLOWED_HOSTS = ['*']
+
+DJANGO_APPS = [
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+]
+
+THIRD_PARTY_APPS = [
+    'rest_framework',
+    'rest_framework.authtoken',
+]
+
+LOCAL_APPS = [
+    'trip',
+]
+
+INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework.authentication.TokenAuthentication',
+    )
+}
+```
+
+```bash
+$ python manage.py migrate
+```
+
+**trip/tests.py**
+
+```python
+from django.contrib.auth import get_user_model
+from rest_framework.reverse import reverse
+from rest_framework.status import HTTP_201_CREATED
+from rest_framework.test import APIClient, APITestCase
+from .serializers import PublicUserSerializer
+
+PASSWORD = 'pAssw0rd!'
+
+
+class AuthenticationTest(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_user_can_sign_up(self):
+        response = self.client.post(reverse('sign_up'), data={
+            'username': 'user@example.com',
+            'password1': PASSWORD,
+            'password2': PASSWORD
+        })
+        user = get_user_model().objects.last()
+        self.assertEqual(HTTP_201_CREATED, response.status_code)
+        self.assertEqual(PublicUserSerializer(user).data, response.data)
+```
+
 **trip/serializers.py**
 
 ```python
@@ -5,46 +69,27 @@ from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 
-class UserSerializer(serializers.ModelSerializer):
-    """User data visible to anyone."""
-
+class PublicUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = get_user_model()
-        fields = ('id', 'username', 'email')
-        read_only_fields = ('username',)
-
-
-class PrivateUserSerializer(UserSerializer):
-    """Private data only visible to the logged-in user."""
-
-    groups = serializers.SlugRelatedField(slug_field='name', many=True, read_only=True)
-
-    class Meta(UserSerializer.Meta):
-        fields = list(UserSerializer.Meta.fields) + ['auth_token', 'groups']
+        fields = ('id', 'username',)
 ```
 
 **trip/apis.py**
 
 ```python
 from django.contrib.auth.forms import UserCreationForm
-from django.contrib.auth.models import Group
 from rest_framework import status, views
 from rest_framework.response import Response
-from .serializers import PrivateUserSerializer
+from .serializers import PublicUserSerializer
 
 
 class SignUpView(views.APIView):
     def post(self, *args, **kwargs):
-        email = self.request.data.get('email')
-        group = self.request.data.get('group', 'rider')
-        user_group, _ = Group.objects.get_or_create(name=group)
         form = UserCreationForm(data=self.request.data)
         if form.is_valid():
             user = form.save()
-            user.email = email
-            user.groups.add(user_group)
-            user.save()
-            return Response(PrivateUserSerializer(user).data, status=status.HTTP_201_CREATED)
+            return Response(PublicUserSerializer(user).data, status=status.HTTP_201_CREATED)
         else:
             return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
 ```
@@ -53,32 +98,71 @@ class SignUpView(views.APIView):
 
 ```python
 from django.conf.urls import url
-from trip.apis import SignUpView
+from .apis import SignUpView
 
 urlpatterns = [
     url(r'^api/sign_up/$', SignUpView.as_view(), name='sign_up'),
 ]
 ```
 
-```bash
-$ curl -H "Content-Type: application/json" -X POST -d '{"username": "Rider", "password1": "pAssw0rd$", "password2": "pAssw0rd$", "email": "rider@example.com", "group": "rider"}' http://localhost:8000/api/sign_up/
+**trip/tests.py**
 
-{"id":1,"username":"Rider","email":"rider@example.com","auth_token":null,"groups":["rider"]}
+```python
+from django.contrib.auth import get_user_model
+from rest_framework.authtoken.models import Token
+from rest_framework.reverse import reverse
+from rest_framework.status import HTTP_200_OK, HTTP_204_NO_CONTENT
+from rest_framework.test import APITestCase
+from .serializers import PrivateUserSerializer
+
+
+def create_user(username='user@example.com', password=PASSWORD):
+    return get_user_model().objects.create_user(username=username, password=password)
+
+
+class AuthenticationTest(APITestCase):
+    def test_user_can_log_in(self):
+        user = create_user()
+        response = self.client.post(reverse('log_in'), data={
+            'username': user.username,
+            'password': PASSWORD,
+        })
+        self.assertEqual(HTTP_200_OK, response.status_code)
+        self.assertEqual(PrivateUserSerializer(user).data, response.data)
+        self.assertIsNotNone(Token.objects.get(user=user))
+
+    def test_user_can_log_out(self):
+        user = create_user()
+        token = Token.objects.create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
+        self.client.login(username=user.username, password=self.password)
+        response = self.client.post(reverse('log_out'))
+        self.assertEqual(HTTP_204_NO_CONTENT, response.status_code)
+        self.assertFalse(Token.objects.filter(user=user).exists())
+```
+
+**trip/serializers.py**
+
+```python
+from django.contrib.auth import get_user_model
+from rest_framework import serializers
+
+
+class PrivateUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = get_user_model()
+        fields = ('id', 'username', 'auth_token',)
 ```
 
 **trip/apis.py**
 
 ```python
 from django.contrib.auth import login, logout
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django.contrib.auth.models import Group
+from django.contrib.auth.forms import AuthenticationForm
 from rest_framework import permissions, status, views
 from rest_framework.authtoken.models import Token
 from rest_framework.response import Response
 from .serializers import PrivateUserSerializer
-
-
-class SignUpView(views.APIView): ...
 
 
 class LogInView(views.APIView):
@@ -97,8 +181,8 @@ class LogOutView(views.APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def post(self, *args, **kwargs):
-        Token.objects.get(user=self.request.user).delete()
         logout(self.request)
+        Token.objects.get(user=self.request.user).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 ```
 
@@ -115,14 +199,35 @@ urlpatterns = [
 ]
 ```
 
-```bash
-$ curl -H "Content-Type: application/json" -X POST -d '{"username": "Rider", "password": "pAssw0rd$"}' http://localhost:8000/api/log_in/
+## HTTP
 
-{"id":1,"username":"Rider","email":"rider@example.com","auth_token":43841bb28794f6b433b5c95df9ff879d104a2b6f,"groups":["rider"]}
-```
+**trip/tests.py**
 
-```bash
-$ curl -H "Authorization: Token 43841bb28794f6b433b5c95df9ff879d104a2b6f" -X POST http://localhost:8000/api/log_out/
+```python
+from django.contrib.auth import get_user_model
+from rest_framework.authtoken.models import Token
+from rest_framework.reverse import reverse
+from rest_framework.status import HTTP_200_OK
+from rest_framework.test import APIClient, APITestCase
+from .models import Trip
+from .serializers import TripSerializer
+
+
+class HttpTripTest(APITestCase):
+    def setUp(self):
+        user = create_user()
+        token = Token.objects.create(user=user)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
+
+    def test_user_can_list_trips(self):
+        trips = [
+            Trip.objects.create(pick_up_address='A', drop_off_address='B'),
+            Trip.objects.create(pick_up_address='B', drop_off_address='C')
+        ]
+        response = self.client.get(reverse('trip:trip_list'))
+        self.assertEqual(HTTP_200_OK, response.status_code)
+        self.assertEqual(TripSerializer(trips, many=True).data, response.data)
 ```
 
 **trip/models.py**
@@ -130,8 +235,8 @@ $ curl -H "Authorization: Token 43841bb28794f6b433b5c95df9ff879d104a2b6f" -X POS
 ```python
 import datetime
 import hashlib
-from django.conf import settings
 from django.db import models
+from django.shortcuts import reverse
 
 
 class Trip(models.Model):
@@ -139,7 +244,7 @@ class Trip(models.Model):
     STARTED = 'STARTED'
     IN_PROGRESS = 'IN_PROGRESS'
     COMPLETED = 'COMPLETED'
-    TRIP_STATUSES = (
+    STATUSES = (
         (REQUESTED, REQUESTED),
         (STARTED, STARTED),
         (IN_PROGRESS, IN_PROGRESS),
@@ -151,72 +256,51 @@ class Trip(models.Model):
     updated = models.DateTimeField(auto_now=True)
     pick_up_address = models.CharField(max_length=255)
     drop_off_address = models.CharField(max_length=255)
-    status = models.CharField(max_length=20, choices=TRIP_STATUSES, default=REQUESTED)
-    driver = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='trips_as_driver')
-    rider = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='trips_as_rider')
+    status = models.CharField(max_length=20, choices=STATUSES, default=REQUESTED)
+
+    def __str__(self):
+        return self.nk
+
+    def get_absolute_url(self):
+        return reverse('trip:trip_detail', kwargs={'trip_nk': self.nk})
 
     def save(self, **kwargs):
         if not self.nk:
+            now = datetime.datetime.now()
             secure_hash = hashlib.md5()
-            secure_hash.update('{now}:{pick_up_address}:{drop_off_address}'.format(
-                now=datetime.datetime.now(),
-                pick_up_address=self.pick_up_address,
-                drop_off_address=self.drop_off_address
-            ).encode('utf-8'))
+            secure_hash.update(f'{now}:{self.pick_up_address}:{self.drop_off_address}'.encode('utf-8'))
             self.nk = secure_hash.hexdigest()
         super().save(**kwargs)
+```
+
+```bash
+$ python manage.py makemigrations
+$ python manage.py migrate
 ```
 
 **trip/serializers.py**
 
 ```python
-from django.contrib.auth import get_user_model
 from rest_framework import serializers
 from .models import Trip
 
 
-class UserSerializer(serializers.ModelSerializer): ...
-
-
-class PrivateUserSerializer(serializers.ModelSerializer): ...
-
-
 class TripSerializer(serializers.ModelSerializer):
-    driver = UserSerializer(allow_null=True, required=False)
-    rider = UserSerializer(allow_null=True, required=False)
-
     class Meta:
         model = Trip
-        fields = ('id', 'nk', 'created', 'updated', 'pick_up_address', 'drop_off_address', 'status', 'driver',
-                  'rider',)
+        fields = '__all__'
         read_only_fields = ('id', 'nk', 'created', 'updated',)
 ```
 
 **trip/apis.py**
 
 ```python
-from django.contrib.auth import login, logout
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django.contrib.auth.models import Group
-from rest_framework import permissions, status, views, viewsets
-from rest_framework.authtoken.models import Token
-from rest_framework.response import Response
+from rest_framework import permissions, viewsets
 from .models import Trip
-from .serializers import TripSerializer, PrivateUserSerializer
-
-
-class SignUpView(views.APIView): ...
-
-
-class LogInView(views.APIView): ...
-
-
-class LogOutView(views.APIView): ...
+from .serializers import TripSerializer
 
 
 class TripView(viewsets.ReadOnlyModelViewSet):
-    lookup_field = 'nk'
-    lookup_url_kwarg = 'trip_nk'
     permission_classes = (permissions.IsAuthenticated,)
     queryset = Trip.objects.all()
     serializer_class = TripSerializer
@@ -244,14 +328,146 @@ from .apis import TripView
 
 urlpatterns = [
     url(r'^$', TripView.as_view({'get': 'list'}), name='trip_list'),
-    url(r'^(?P<trip_nk>\w+)/$', TripView.as_view({'get': 'retrieve'}), name='trip_detail'),
 ]
 ```
 
-```bash
-$ curl -H "Authorization: Token 81ff6ef21b02f22435d9b97f06e4c36b3bc4bb81" http://localhost:8000/api/trip/
+**trip/tests.py**
 
-[]
+```python
+from rest_framework.status import HTTP_200_OK
+from rest_framework.test import APITestCase
+from .models import Trip
+from .serializers import TripSerializer
+
+
+class HttpTripTest(APITestCase):
+    def test_user_can_retrieve_trip_by_nk(self):
+        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B')
+        response = self.client.get(trip.get_absolute_url())
+        self.assertEqual(HTTP_200_OK, response.status_code)
+        self.assertEqual(TripSerializer(trip).data, response.data)
+```
+
+**trip/apis.py**
+
+```python
+from rest_framework import permissions, viewsets
+from .models import Trip
+from .serializers import TripSerializer
+
+
+class TripView(viewsets.ReadOnlyModelViewSet):
+    lookup_field = 'nk'
+    lookup_url_kwarg = 'trip_nk'
+    permission_classes = (permissions.IsAuthenticated,)
+    queryset = Trip.objects.all()
+    serializer_class = TripSerializer
+```
+
+**trip/urls.py**
+
+```python
+from django.conf.urls import url
+from .apis import TripView
+
+urlpatterns = [
+    url(r'^$', TripView.as_view({'get': 'list'}), name='trip_list'),
+    url(r'^(?P<trip_nk>\w{32})/$', TripView.as_view({'get': 'retrieve'}), name='trip_detail'),
+]
+```
+
+## WebSockets
+
+**taxi/settings.py**
+
+```python
+THIRD_PARTY_APPS = [
+    'channels',
+    'rest_framework',
+    'rest_framework.authtoken',
+]
+
+WSGI_APPLICATION = 'taxi.asgi.application'
+
+REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379')
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'asgi_redis.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [REDIS_URL],
+        },
+        'ROUTING': 'taxi.routing.channel_routing',
+    },
+}
+```
+
+**taxi/asgi.py**
+
+```python
+import os
+from channels import asgi
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'taxi.settings')
+
+channel_layer = asgi.get_channel_layer()
+```
+
+**taxi/routing.py**
+
+```python
+channel_routing = []
+```
+
+**trip/tests.py**
+
+```python
+from django.contrib.auth import get_user_model
+from channels.test import ChannelTestCase, HttpClient
+
+
+class WebSocketTripTest(ChannelTestCase):
+    def setUp(self):
+        self.driver = create_user('driver@example.com')
+        self.rider = create_user('rider@example.com')
+
+    def connect_as_driver(self, driver):
+        client = HttpClient()
+        client.login(username=driver.username, password=PASSWORD)
+        client.send_and_consume('websocket.connect', path='/driver/')
+        return client
+
+    def connect_as_rider(self, rider):
+        client = HttpClient()
+        client.login(username=rider.username, password=PASSWORD)
+        client.send_and_consume('websocket.connect', path='/rider/')
+        return client
+
+    def test_driver_can_connect_via_websockets(self):
+        client = self.connect_as_driver(self.driver)
+        message = client.receive()
+        self.assertIsNone(message)
+
+    def test_rider_can_connect_via_websockets(self):
+        client = self.connect_as_rider(self.rider)
+        message = client.receive()
+        self.assertIsNone(message)
+```
+
+**trip/models.py**
+
+```python
+from django.conf import settings
+
+
+class Trip(models.Model):
+    driver = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='trips_as_driver')
+    rider = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='trips_as_rider')
+```
+
+```bash
+$ python manage.py makemigrations
+$ python manage.py migrate
 ```
 
 **trip/serializers.py**
@@ -262,10 +478,16 @@ from rest_framework import serializers
 from .models import Trip
 
 
-class UserSerializer(serializers.ModelSerializer): ...
+class PublicUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = get_user_model()
+        fields = ('id', 'username',)
+        read_only_fields = ('username',)
 
 
-class PrivateUserSerializer(serializers.ModelSerializer): ...
+class PrivateUserSerializer(PublicUserSerializer):
+    class Meta(PublicUserSerializer.Meta):
+        fields = list(PublicUserSerializer.Meta.fields) + ['auth_token']
 
 
 class TripSerializer(serializers.ModelSerializer):
@@ -273,22 +495,120 @@ class TripSerializer(serializers.ModelSerializer):
     rider = UserSerializer(allow_null=True, required=False)
 
     def create(self, validated_data):
-        user_model = get_user_model()
-        rider_data = validated_data.pop('rider', None)
         driver_data = validated_data.pop('driver', None)
+        rider_data = validated_data.pop('rider', None)
         trip = Trip.objects.create(**validated_data)
-        if rider_data:
-            trip.rider = user_model.objects.get(**rider_data)
         if driver_data:
-            trip.driver = user_model.objects.get(**driver_data)
+            trip.driver = get_user_model().objects.get(**driver_data)
+        if rider_data:
+            trip.rider = get_user_model().objects.get(**rider_data)
         trip.save()
         return trip
+```
 
-    class Meta:
-        model = Trip
-        fields = ('id', 'nk', 'created', 'updated', 'pick_up_address', 'drop_off_address', 'status', 'driver',
-                  'rider',)
-        read_only_fields = ('id', 'nk', 'created', 'updated',)
+**trip/consumers.py**
+
+```python
+from channels.generic.websockets import JsonWebsocketConsumer
+
+
+class TripConsumer(JsonWebsocketConsumer):
+    def connect(self, message, **kwargs):
+        self.message.reply_channel.send({'accept': True})
+
+
+class DriverConsumer(TripConsumer):
+    pass
+
+
+class RiderConsumer(TripConsumer):
+    pass
+```
+
+**taxi/routing.py**
+
+```python
+from channels import route_class
+from trip.consumers import DriverConsumer, RiderConsumer
+
+
+channel_routing = [
+    route_class(DriverConsumer, path=r'^/driver/$'),
+    route_class(RiderConsumer, path=r'^/rider/$'),
+]
+```
+
+**trip/tests.py**
+
+```python
+from channels.test import ChannelTestCase
+from .models import Trip
+from .serializers import TripSerializer
+
+
+class WebSocketTripTest(ChannelTestCase):
+    def test_rider_can_create_trips(self):
+        client = self.connect_as_rider(self.rider)
+        client.send_and_consume('websocket.receive', path='/rider/', content={
+            'text': {
+                'pick_up_address': 'A',
+                'drop_off_address': 'B',
+                'rider': PublicUserSerializer(self.rider).data
+            }
+        }})
+        message = client.receive()
+        trip = Trip.objects.last()
+        self.assertEqual(TripSerializer(trip).data, message)
+```
+
+**trip/consumers.py**
+
+```python
+from channels.generic.websockets import JsonWebsocketConsumer
+from .serializers import TripSerializer
+
+
+class RiderConsumer(TripConsumer):
+    def receive(self, content, **kwargs):
+        serializer = TripSerializer(data=content)
+        serializer.is_valid(raise_exception=True)
+        trip = serializer.create(serializer.validated_data)
+        self.send(content=TripSerializer(trip).data)
+```
+
+**trip/tests.py**
+
+```python
+from channels.test import ChannelTestCase
+from .models import Trip
+from .serializers import PublicUserSerializer, TripSerializer
+
+
+class WebSocketTripTest(ChannelTestCase):
+    def create_trip(self, rider, pick_up_address='A', drop_off_address='B'):
+        client = self.connect_as_rider(rider)
+        client.send_and_consume('websocket.receive', path='/rider/', content={
+            'text': {
+                'pick_up_address': pick_up_address,
+                'drop_off_address': drop_off_address,
+                'rider': PublicUserSerializer(rider).data
+            }
+        })
+        return client
+
+    def test_rider_can_create_trips(self):
+        client = self.create_trip(self.rider)
+        message = client.receive()
+        trip = Trip.objects.last()
+        self.assertEqual(TripSerializer(trip).data, message)
+
+    def test_rider_is_subscribed_to_trip_channel_on_creation(self):
+        client = self.create_trip(self.rider)
+        client.receive()
+        trip = Trip.objects.last()
+        message = {'detail': 'This is a test message.'}
+        Group(trip.nk).send(message)
+        self.assertEqual(message, client.receive())
 ```
 
 **trip/consumers.py**
@@ -304,7 +624,7 @@ class TripConsumer(JsonWebsocketConsumer):
     http_user_and_session = True
 
     def user_trips(self):
-        return Trip.objects.none()
+        raise NotImplementedError()
 
     def connect(self, message, **kwargs):
         self.message.reply_channel.send({'accept': True})
@@ -324,29 +644,52 @@ class RiderConsumer(TripConsumer):
         return self.message.user.trips_as_rider.exclude(status=Trip.COMPLETED)
 
     def receive(self, content, **kwargs):
-        # Create a new trip from the incoming data.
         serializer = TripSerializer(data=content)
         serializer.is_valid(raise_exception=True)
         trip = serializer.create(serializer.validated_data)
-
-        # Subscribe rider to messages regarding the newly created trip.
-        # Rider will receive updates from driver.
         self.message.channel_session['trip_nks'].append(trip.nk)
         Group(trip.nk).add(self.message.reply_channel)
         trips_data = TripSerializer(trip).data
         self.group_send(name=trip.nk, content=trips_data)
 ```
 
-**taxi/routing.py**
+**trip/tests.py**
 
 ```python
-from channels import route_class
-from trip.consumers import RiderConsumer
+from django.contrib.auth import get_user_model
+from channels.test import ChannelTestCase
+from .models import Trip
+from .serializers import TripSerializer
 
 
-channel_routing = [
-    route_class(RiderConsumer, path=r'^/rider/$'),
-]
+class WebSocketTripTest(ChannelTestCase):
+    def update_trip(self, driver, status):
+        client = self.connect_as_driver(driver)
+        client.send_and_consume('websocket.receive', path='/driver/', content={
+            'text': {
+                'nk': trip.nk,
+                'pick_up_address': trip.pick_up_address,
+                'drop_off_address': trip.drop_off_address,
+                'status': status,
+                'driver': UserSerializer(driver).data
+            }
+        })
+        return client
+
+    def test_driver_can_update_trips(self):
+        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B')
+        client = self.update_trip(self.driver, trip=trip, status=Trip.STARTED)
+        trip = Trip.objects.get(nk=trip.nk)
+        self.assertEqual(TripSerializer(trip).data, client.receive())
+
+    def test_driver_is_subscribed_to_trip_channel_on_update(self):
+        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B')
+        client = self.update_trip(self.driver, trip=trip, status=Trip.STARTED)
+        client.receive()
+        trip = Trip.objects.last()
+        message = {'detail': 'This is a test message.'}
+        Group(trip.nk).send(message)
+        self.assertEqual(message, client.receive())
 ```
 
 **trip/serializers.py**
@@ -354,52 +697,29 @@ channel_routing = [
 ```python
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
-from .models import Trip
-
-
-class UserSerializer(serializers.ModelSerializer): ...
-
-
-class PrivateUserSerializer(serializers.ModelSerializer): ...
 
 
 class TripSerializer(serializers.ModelSerializer):
-    driver = UserSerializer(allow_null=True, required=False)
-    rider = UserSerializer(allow_null=True, required=False)
-
-    def create(self, validated_data): ...
-
     def update(self, instance, validated_data):
-        user_model = get_user_model()
-        rider_data = validated_data.pop('rider', None)
-        if rider_data:
-            instance.rider = user_model.objects.get(**rider_data)
         driver_data = validated_data.pop('driver', None)
         if driver_data:
-            instance.driver = user_model.objects.get(**driver_data)
+            instance.driver = get_user_model().objects.get(**driver_data)
+        rider_data = validated_data.pop('rider', None)
+        if rider_data:
+            instance.rider = get_user_model().objects.get(**rider_data)
         instance.pick_up_address = validated_data.get('pick_up_address', instance.pick_up_address)
         instance.drop_off_address = validated_data.get('drop_off_address', instance.drop_off_address)
         instance.status = validated_data.get('status', instance.status)
         instance.save()
         return instance
-
-    class Meta:
-        model = Trip
-        fields = ('id', 'nk', 'created', 'updated', 'pick_up_address', 'drop_off_address', 'status', 'driver',
-                  'rider',)
-        read_only_fields = ('id', 'nk', 'created', 'updated',)
 ```
 
 **trip/consumers.py**
 
 ```python
 from channels import Group
-from channels.generic.websockets import JsonWebsocketConsumer
 from .models import Trip
 from .serializers import TripSerializer
-
-
-class TripConsumer(JsonWebsocketConsumer): ...
 
 
 class DriverConsumer(TripConsumer):
@@ -413,51 +733,160 @@ class DriverConsumer(TripConsumer):
         Group('drivers').add(self.message.reply_channel)
 
     def receive(self, content, **kwargs):
-        """Drivers should send trip status updates."""
-
-        # Update an existing trip from the incoming data.
         trip = Trip.objects.get(nk=content.get('nk'))
         serializer = TripSerializer(data=content)
         serializer.is_valid(raise_exception=True)
         trip = serializer.update(trip, serializer.validated_data)
-
-        # Subscribe driver to messages regarding the existing trip.
-        # Driver will receive updates about existing trip.
         self.message.channel_session['trip_nks'].append(trip.nk)
         Group(trip.nk).add(self.message.reply_channel)
         trips_data = TripSerializer(trip).data
         self.group_send(name=trip.nk, content=trips_data)
+```
+
+**trip/tests.py**
+
+```python
+from channels.test import ChannelTestCase
+from .models import Trip
+from .serializers import TripSerializer
+
+
+class WebSocketTripTest(ChannelTestCase):
+    def test_driver_is_alerted_on_trip_creation(self):
+        client = self.connect_as_driver(self.driver)
+        self.create_trip(self.rider)
+        trip = Trip.objects.last()
+        self.assertEqual(TripSerializer(trip).data, client.receive())
+
+    def test_rider_is_alerted_on_trip_update(self):
+        client = self.create_trip(self.rider)
+        client.receive()
+        trip = Trip.objects.last()
+        self.update_trip(self.driver, trip=trip, status=Trip.STARTED)
+        trip = Trip.objects.get(nk=trip.nk)
+        self.assertEqual(TripSerializer(trip).data, client.receive())
+```
+
+**trip/consumers.py**
+
+```python
+from channels import Group
+from .serializers import TripSerializer
 
 
 class RiderConsumer(TripConsumer):
-    def user_trips(self): ...
-
     def receive(self, content, **kwargs):
-        # Create a new trip from the incoming data.
         serializer = TripSerializer(data=content)
         serializer.is_valid(raise_exception=True)
         trip = serializer.create(serializer.validated_data)
-
-        # Subscribe rider to messages regarding the newly created trip.
-        # Rider will receive updates from driver.
         self.message.channel_session['trip_nks'].append(trip.nk)
         Group(trip.nk).add(self.message.reply_channel)
         trips_data = TripSerializer(trip).data
         self.group_send(name=trip.nk, content=trips_data)
-
-        # Alert all drivers that a new trip has been requested.
         self.group_send(name='drivers', content=trips_data)
 ```
 
-**taxi/routing.py**
+**trip/serializers.py**
 
 ```python
-from channels import route_class
-from trip.consumers import DriverConsumer, RiderConsumer
+from django.contrib.auth import get_user_model
+from rest_framework import serializers
 
 
-channel_routing = [
-    route_class(DriverConsumer, path=r'^/driver/$'),
-    route_class(RiderConsumer, path=r'^/rider/$'),
-]
+class PublicUserSerializer(serializers.ModelSerializer):
+    groups = serializers.SlugRelatedField(slug_field='name', many=True, read_only=True)
+
+    class Meta:
+        model = get_user_model()
+        fields = ('id', 'username', 'groups',)
+        read_only_fields = ('username',)
+```
+
+**trip/apis.py**
+
+```python
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.models import Group
+from rest_framework import status, views
+from rest_framework.response import Response
+from .serializers import PublicUserSerializer
+
+
+class SignUpView(views.APIView):
+    def post(self, *args, **kwargs):
+        group = self.request.data.pop('group', 'rider')
+        user_group, _ = Group.objects.get_or_create(name=group)
+        form = UserCreationForm(data=self.request.data)
+        if form.is_valid():
+            user = form.save()
+            user.groups.add(user_group)
+            user.save()
+            return Response(PublicUserSerializer(user).data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(form.errors, status=status.HTTP_400_BAD_REQUEST)
+```
+
+
+
+
+
+
+
+
+## Rider Commands
+
+```bash
+$ curl -H "Content-Type: application/json" -X POST -d '{"username": "rider@example.com", "password1": "pAssw0rd!", "password2": "pAssw0rd!", "group": "rider"}' http://localhost:8000/api/sign_up/
+
+{"id":1,"username":"rider@example.com","auth_token":null,"groups":["rider"]}
+```
+
+```bash
+$ curl -H "Content-Type: application/json" -X POST -d '{"username": "rider@example.com", "password": "pAssw0rd!"}' http://localhost:8000/api/log_in/
+
+{"id":1,"username":"rider@example.com","auth_token":81ff6ef21b02f22435d9b97f06e4c36b3bc4bb81,"groups":["rider"]}
+```
+
+```bash
+$ curl -H "Authorization: Token 81ff6ef21b02f22435d9b97f06e4c36b3bc4bb81" -X POST http://localhost:8000/api/log_out/
+```
+
+```bash
+$ wscat -H "Content-Type: application/json; Authorization: Token 81ff6ef21b02f22435d9b97f06e4c36b3bc4bb81" -c ws://localhost:8000/rider/ --parsecommands
+```
+
+```bash
+> send '{"text":{"pick_up_address":"A","drop_off_address":"B","rider":{"id":3,"username":"rider@example.com"}}}'
+```
+
+## Driver Commands
+
+```bash
+$ curl -H "Content-Type: application/json" -X POST -d '{"username": "driver@example.com", "password1": "pAssw0rd!", "password2": "pAssw0rd!", "group": "driver"}' http://localhost:8000/api/sign_up/
+
+{"id":1,"username":"driver@example.com","auth_token":null,"groups":["driver"]}
+```
+
+```bash
+$ curl -H "Content-Type: application/json" -X POST -d '{"username": "driver@example.com", "password": "pAssw0rd!"}' http://localhost:8000/api/log_in/
+
+{"id":1,"username":"driver@example.com","auth_token":43841bb28794f6b433b5c95df9ff879d104a2b6f,"groups":["driver"]}
+```
+
+```bash
+$ curl -H "Authorization: Token 43841bb28794f6b433b5c95df9ff879d104a2b6f" -X POST http://localhost:8000/api/log_out/
+```
+
+## Universal Commands
+
+```bash
+$ curl -H "Authorization: Token 81ff6ef21b02f22435d9b97f06e4c36b3bc4bb81" http://localhost:8000/api/trip/
+
+[]
+```
+
+```bash
+$ curl -H "Authorization: Token 81ff6ef21b02f22435d9b97f06e4c36b3bc4bb81" http://localhost:8000/api/trip/something/
+
+[]
 ```

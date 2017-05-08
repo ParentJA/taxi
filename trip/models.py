@@ -31,14 +31,14 @@ class Trip(models.Model):
 
     def save(self, **kwargs):
         if not self.nk:
+            now = datetime.datetime.now()
             secure_hash = hashlib.md5()
-            secure_hash.update('{now}:{pick_up_address}:{drop_off_address}'.format(
-                now=datetime.datetime.now(),
-                pick_up_address=self.pick_up_address,
-                drop_off_address=self.drop_off_address
-            ).encode('utf-8'))
+            secure_hash.update(f'{now}:{self.pick_up_address}:{self.drop_off_address}'.encode('utf-8'))
             self.nk = secure_hash.hexdigest()
         super().save(**kwargs)
 
     def get_absolute_url(self):
         return reverse('trip:trip_detail', kwargs={'trip_nk': self.nk})
+
+    def __str__(self):
+        return self.nk

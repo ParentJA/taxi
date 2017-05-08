@@ -15,13 +15,11 @@ from .serializers import TripSerializer, PrivateUserSerializer
 
 class SignUpView(views.APIView):
     def post(self, *args, **kwargs):
-        email = self.request.data.get('email')
         group = self.request.data.get('group', 'rider')
         user_group, _ = Group.objects.get_or_create(name=group)
         form = UserCreationForm(data=self.request.data)
         if form.is_valid():
             user = form.save()
-            user.email = email
             user.groups.add(user_group)
             user.save()
             return Response(PrivateUserSerializer(user).data, status=status.HTTP_201_CREATED)

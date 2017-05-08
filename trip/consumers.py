@@ -11,7 +11,7 @@ class TripConsumer(JsonWebsocketConsumer):
     http_user_and_session = True
 
     def user_trips(self):
-        return Trip.objects.none()
+        raise NotImplementedError()
 
     def connect(self, message, **kwargs):
         self.message.reply_channel.send({'accept': True})

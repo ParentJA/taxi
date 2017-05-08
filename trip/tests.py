@@ -3,142 +3,146 @@ import hashlib
 
 # Django imports.
 from django.contrib.auth import get_user_model
-from django.shortcuts import reverse
 
 # Third-party imports.
 from channels import Group
 from channels.test import ChannelTestCase, HttpClient
 from rest_framework.authtoken.models import Token
-from rest_framework.test import APIClient, APITestCase
+from rest_framework.reverse import reverse
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_204_NO_CONTENT
+from rest_framework.test import APIClient, APITestCase
 
 # Local imports.
 from .models import Trip
-from .serializers import TripSerializer, UserSerializer
+from .serializers import TripSerializer, PrivateUserSerializer, UserSerializer
+
+PASSWORD = 'pAssw0rd!'
 
 
-def create_password():
-    secure_hash = hashlib.md5()
-    secure_hash.update('password'.encode('utf-8'))
-    return secure_hash.hexdigest()
-
-
-def create_user(email):
-    return get_user_model().objects.create_user(username=email, email=email, password=create_password())
-
-
-def log_in(client, username, password):
-    response = client.post(reverse('log_in'), data={
-        'username': username,
-        'password': password,
-    })
-    return response.data['auth_token']
+def create_user(username='user@example.com', password=PASSWORD):
+    return get_user_model().objects.create_user(username=username, password=password)
 
 
 class AuthenticationTest(APITestCase):
     def setUp(self):
         self.client = APIClient()
-        self.password = create_password()
 
-    def test_can_sign_up(self):
-        # curl -H "Content-Type: application/json" -X POST -d '{"username": "user@example.com", "password1": "pAssw0rd!", "password2": "pAssw0rd!"}' http://localhost:8000/api/sign_up/
+    def test_user_can_sign_up(self):
         response = self.client.post(reverse('sign_up'), data={
             'username': 'user@example.com',
-            'email': 'user@example.com',
-            'password1': self.password,
-            'password2': self.password,
+            'password1': PASSWORD,
+            'password2': PASSWORD,
             'group': 'rider',
         })
+        user = get_user_model().objects.last()
         self.assertEqual(HTTP_201_CREATED, response.status_code)
-        self.assertEqual(0, Token.objects.count())
-        self.assertEqual('user@example.com', response.data['username'])
+        self.assertEqual(PrivateUserSerializer(user).data, response.data)
 
-    def test_can_log_in(self):
-        # curl -H "Content-Type: application/json" -X POST -d '{"username": "user@example.com", "password": "pAssw0rd!"}' http://localhost:8000/api/log_in/
-        user = create_user('user@example.com')
+    def test_user_can_log_in(self):
+        user = create_user()
         response = self.client.post(reverse('log_in'), data={
-            'username': 'user@example.com',
-            'password': self.password,
+            'username': user.username,
+            'password': PASSWORD,
         })
         self.assertEqual(HTTP_200_OK, response.status_code)
-        self.assertEqual(1, Token.objects.count())
-        self.assertEqual(user.username, response.data['username'])
+        self.assertEqual(PrivateUserSerializer(user).data, response.data)
+        self.assertIsNotNone(Token.objects.get(user=user))
 
-    def log_out(self):
-        # curl -H "Authorization: Token e4195ef7a0aa819a63dae152a27dec32cc0afaf8" -X POST http://localhost:8000/api/log_out/
-        user = create_user('user@example.com')
-        log_in(self.client, username=user.username, password=self.password)
+    def test_user_can_log_out(self):
+        user = create_user()
+        token = Token.objects.create(user=user)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
+        self.client.login(username=user.username, password=PASSWORD)
         response = self.client.post(reverse('log_out'))
         self.assertEqual(HTTP_204_NO_CONTENT, response.status_code)
-        self.assertEqual(0, Token.objects.count())
+        self.assertFalse(Token.objects.filter(user=user).exists())
 
 
 class TripTest(APITestCase):
     def setUp(self):
-        self.password = create_password()
-        self.user1 = create_user(email='user1@example.com')
-        self.user2 = create_user(email='user2@example.com')
-        self.user3 = create_user(email='user3@example.com')
-        self.token = log_in(self.client, username=self.user1.username, password=self.password)
+        user = create_user()
+        token = Token.objects.create(user=user)
         self.client = APIClient()
-        self.client.credentials(HTTP_AUTHORIZATION='Token {token}'.format(token=self.token))
+        self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
 
-    def test_can_list_trips(self):
-        trip = Trip.objects.create(rider=self.user1)
-        response = self.client.get(reverse('trip:trip_list'), format='json')
+    def test_user_can_list_trips(self):
+        trips = [
+            Trip.objects.create(pick_up_address='A', drop_off_address='B'),
+            Trip.objects.create(pick_up_address='B', drop_off_address='C')
+        ]
+        response = self.client.get(reverse('trip:trip_list'))
         self.assertEqual(HTTP_200_OK, response.status_code)
-        self.assertEqual(TripSerializer([trip], many=True).data, response.data)
+        self.assertEqual(TripSerializer(trips, many=True).data, response.data)
 
-    def test_can_retrieve_trip(self):
-        trip = Trip.objects.create(rider=self.user1)
-        response = self.client.get(trip.get_absolute_url(), format='json')
+    def test_user_can_retrieve_trip_by_nk(self):
+        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B')
+        response = self.client.get(trip.get_absolute_url())
         self.assertEqual(HTTP_200_OK, response.status_code)
         self.assertEqual(TripSerializer(trip).data, response.data)
 
 
 class WebSocketTripTest(ChannelTestCase):
     def setUp(self):
-        self.password = create_password()
-        self.driver = create_user(email='driver@example.com')
-        self.rider = create_user(email='rider@example.com')
-        self.trip_as_rider = {
-            'pick_up_address': 'A',
-            'drop_off_address': 'B'
-        }
+        self.driver = create_user(username='driver@example.com')
+        self.rider = create_user(username='rider@example.com')
 
     def connect_as_driver(self, driver):
         client = HttpClient()
-        client.login(username=driver.username, password=create_password())
+        client.login(username=driver.username, password=PASSWORD)
         client.send_and_consume('websocket.connect', path='/driver/')
         return client
 
     def connect_as_rider(self, rider):
         client = HttpClient()
-        client.login(username=rider.username, password=create_password())
+        client.login(username=rider.username, password=PASSWORD)
         client.send_and_consume('websocket.connect', path='/rider/')
         return client
 
-    def create_trip_as_rider(self, rider, **kwargs):
-        kwargs.update({'rider': UserSerializer(rider).data})
+    def create_trip(self, rider, pick_up_address='A', drop_off_address='B'):
         client = self.connect_as_rider(rider)
-        client.send_and_consume('websocket.receive', path='/rider/', content={'text': kwargs})
+        client.send_and_consume('websocket.receive', path='/rider/', content={
+            'text': {
+                'pick_up_address': pick_up_address,
+                'drop_off_address': drop_off_address,
+                'rider': UserSerializer(rider).data
+            }
+        })
         return client
 
-    def update_trip_as_driver(self, driver, trip, **kwargs):
-        trip.driver = driver
-        for k, v in kwargs.items():
-            setattr(trip, k, v)
+    def update_trip(self, driver, trip, status):
         client = self.connect_as_driver(driver)
-        client.send_and_consume('websocket.receive', path='/driver/', content={'text': TripSerializer(trip).data})
+        client.send_and_consume('websocket.receive', path='/driver/', content={
+            'text': {
+                'nk': trip.nk,
+                'pick_up_address': trip.pick_up_address,
+                'drop_off_address': trip.drop_off_address,
+                'status': status,
+                'driver': UserSerializer(driver).data
+            }
+        })
         return client
 
-    def test_rider_can_create_trip(self):
-        client = self.create_trip_as_rider(self.rider, **self.trip_as_rider)
+    def test_driver_can_connect_via_websockets(self):
+        client = HttpClient()
+        client.login(username=self.driver.username, password='pAssw0rd!')
+        client.send_and_consume('websocket.connect', path='/driver/')
+        message = client.receive()
+        self.assertIsNone(message)
+
+    def test_rider_can_connect_via_websockets(self):
+        client = HttpClient()
+        client.login(username=self.rider.username, password='pAssw0rd!')
+        client.send_and_consume('websocket.connect', path='/rider/')
+        message = client.receive()
+        self.assertIsNone(message)
+
+    def test_rider_can_create_trips(self):
+        client = self.create_trip(self.rider)
         trip = Trip.objects.last()
         self.assertEqual(TripSerializer(trip).data, client.receive())
 
     def test_rider_is_subscribed_to_trip_channel(self):
-        client = self.create_trip_as_rider(self.rider, **self.trip_as_rider)
+        client = self.create_trip(self.rider)
         client.receive()
         trip = Trip.objects.last()
         message = {'message': 'test'}
@@ -147,7 +151,7 @@ class WebSocketTripTest(ChannelTestCase):
 
     def test_rider_is_not_subscribed_to_other_trip_channel(self):
         trip = Trip.objects.create(pick_up_address='B', drop_off_address='C')
-        client = self.create_trip_as_rider(self.rider, **self.trip_as_rider)
+        client = self.create_trip(self.rider)
         client.receive()
         message = {'message': 'test'}
         Group(trip.nk).send(message)
@@ -155,27 +159,29 @@ class WebSocketTripTest(ChannelTestCase):
 
     def test_driver_is_alerted_on_trip_creation(self):
         client = self.connect_as_driver(self.driver)
-        self.create_trip_as_rider(self.rider, **self.trip_as_rider)
+        self.create_trip(self.rider)
         trip = Trip.objects.last()
         self.assertEqual(TripSerializer(trip).data, client.receive())
 
-    def test_driver_can_update_trip(self):
-        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B', status=Trip.REQUESTED)
-        client = self.update_trip_as_driver(self.driver, trip=trip, **{'status': Trip.STARTED})
-        self.assertEqual(Trip.STARTED, client.receive().get('status'))
+    def test_driver_can_update_trips(self):
+        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B')
+        client = self.update_trip(self.driver, trip=trip, status=Trip.STARTED)
+        trip = Trip.objects.get(nk=trip.nk)
+        self.assertEqual(TripSerializer(trip).data, client.receive())
 
-    def test_driver_is_subscribed_to_trip_channel(self):
-        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B', status=Trip.REQUESTED)
-        client = self.update_trip_as_driver(self.driver, trip=trip, **{'status': Trip.STARTED})
+    def test_driver_is_subscribed_to_trip_channel_on_update(self):
+        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B')
+        client = self.update_trip(self.driver, trip=trip, status=Trip.STARTED)
         client.receive()
-        message = {'message': 'test'}
+        trip = Trip.objects.last()
+        message = {'detail': 'This is a test message.'}
         Group(trip.nk).send(message)
         self.assertEqual(message, client.receive())
 
     def test_rider_is_alerted_on_trip_update(self):
-        client = self.create_trip_as_rider(self.rider, **self.trip_as_rider)
+        client = self.create_trip(self.rider)
         client.receive()
         trip = Trip.objects.last()
-        trip.status = Trip.STARTED
-        self.update_trip_as_driver(self.driver, trip=trip, **{'status': Trip.STARTED})
-        self.assertEqual(Trip.STARTED, client.receive().get('status'))
+        self.update_trip(self.driver, trip=trip, status=Trip.STARTED)
+        trip = Trip.objects.get(nk=trip.nk)
+        self.assertEqual(TripSerializer(trip).data, client.receive())
