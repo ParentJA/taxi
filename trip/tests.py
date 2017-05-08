@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group as AuthGroup
 from channels import Group
 from channels.test import ChannelTestCase, HttpClient
 from rest_framework.authtoken.models import Token
@@ -11,8 +12,12 @@ from .serializers import PublicUserSerializer, PrivateUserSerializer, TripSerial
 PASSWORD = 'pAssw0rd!'
 
 
-def create_user(username='user@example.com', password=PASSWORD):
-    return get_user_model().objects.create_user(username=username, password=password)
+def create_user(username='user@example.com', password=PASSWORD, group='rider'):
+    auth_group, _ = AuthGroup.objects.get_or_create(name=group)
+    user = get_user_model().objects.create_user(username=username, password=password)
+    user.groups.add(auth_group)
+    user.save()
+    return user
 
 
 class AuthenticationTest(APITestCase):
@@ -51,22 +56,23 @@ class AuthenticationTest(APITestCase):
 
 class HttpTripTest(APITestCase):
     def setUp(self):
-        user = create_user()
-        token = Token.objects.create(user=user)
+        self.user = create_user()
+        token = Token.objects.create(user=self.user)
         self.client = APIClient()
         self.client.credentials(HTTP_AUTHORIZATION=f'Token {token}')
 
-    def test_user_can_list_trips(self):
+    def test_user_can_list_personal_trips(self):
         trips = [
-            Trip.objects.create(pick_up_address='A', drop_off_address='B'),
-            Trip.objects.create(pick_up_address='B', drop_off_address='C')
+            Trip.objects.create(pick_up_address='A', drop_off_address='B', rider=self.user),
+            Trip.objects.create(pick_up_address='B', drop_off_address='C', rider=self.user),
+            Trip.objects.create(pick_up_address='C', drop_off_address='D')
         ]
         response = self.client.get(reverse('trip:trip_list'))
         self.assertEqual(HTTP_200_OK, response.status_code)
-        self.assertEqual(TripSerializer(trips, many=True).data, response.data)
+        self.assertEqual(TripSerializer(trips[0:2], many=True).data, response.data)
 
-    def test_user_can_retrieve_trip_by_nk(self):
-        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B')
+    def test_user_can_retrieve_personal_trip_by_nk(self):
+        trip = Trip.objects.create(pick_up_address='A', drop_off_address='B', rider=self.user)
         response = self.client.get(trip.get_absolute_url())
         self.assertEqual(HTTP_200_OK, response.status_code)
         self.assertEqual(TripSerializer(trip).data, response.data)
@@ -74,8 +80,8 @@ class HttpTripTest(APITestCase):
 
 class WebSocketTripTest(ChannelTestCase):
     def setUp(self):
-        self.driver = create_user(username='driver@example.com')
-        self.rider = create_user(username='rider@example.com')
+        self.driver = create_user(username='driver@example.com', group='driver')
+        self.rider = create_user(username='rider@example.com', group='rider')
 
     def connect_as_driver(self, driver):
         client = HttpClient()
