@@ -1,7 +1,4 @@
-# Django imports.
 from django.conf.urls import url
-
-# Local imports.
 from .apis import TripView
 
 urlpatterns = [

@@ -1,10 +1,5 @@
-# Django imports.
 from django.contrib.auth import get_user_model
-
-# Third-party imports.
 from rest_framework import serializers
-
-# Local imports.
 from .models import Trip
 
 

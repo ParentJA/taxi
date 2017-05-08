@@ -1,8 +1,5 @@
-# Third-party imports.
 from channels import Group
 from channels.generic.websockets import JsonWebsocketConsumer
-
-# Local imports.
 from .models import Trip
 from .serializers import TripSerializer
 

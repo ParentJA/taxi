@@ -1,18 +1,10 @@
-# Standard library imports.
-import hashlib
-
-# Django imports.
 from django.contrib.auth import get_user_model
-
-# Third-party imports.
 from channels import Group
 from channels.test import ChannelTestCase, HttpClient
 from rest_framework.authtoken.models import Token
 from rest_framework.reverse import reverse
 from rest_framework.status import HTTP_200_OK, HTTP_201_CREATED, HTTP_204_NO_CONTENT
 from rest_framework.test import APIClient, APITestCase
-
-# Local imports.
 from .models import Trip
 from .serializers import TripSerializer, PrivateUserSerializer, UserSerializer
 

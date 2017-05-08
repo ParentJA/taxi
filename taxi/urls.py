@@ -1,8 +1,5 @@
-# Django imports.
 from django.conf.urls import include, url
 from django.views.generic import TemplateView
-
-# Local imports.
 from trip.apis import SignUpView, LogInView, LogOutView
 
 urlpatterns = [

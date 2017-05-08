@@ -1,7 +1,4 @@
-# Third-party imports.
 from channels import route_class
-
-# Local imports.
 from trip.consumers import DriverConsumer, RiderConsumer
 
 
